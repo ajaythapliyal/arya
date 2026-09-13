@@ -1,0 +1,42 @@
+description: Arya eval harness — proving the HTTP provider + streaming parse works end-to-end
+
+providers:
+  - id: https
+    config:
+      url: http://localhost:3000/api/chat
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        messages:
+          - id: "1"
+            role: user
+            parts:
+              - type: text
+                text: "{{message}}"
+      transformResponse: |
+        (json, text) => {
+          let output = '';
+          for (const line of String(text || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
+            try {
+              const evt = JSON.parse(trimmed.slice(6));
+              if (evt.type === 'text-delta' && evt.delta) output += evt.delta;
+            } catch {}
+          }
+          return output.trim();
+        }
+
+prompts:
+  - "{{message}}"
+
+tests:
+  - description: "Deterministic — no markdown formatting in the reply"
+    vars:
+      message: "What is the SI unit of force?"
+    assert:
+      - type: not-contains
+        value: "**"
+      - type: not-contains
+        value: "# "

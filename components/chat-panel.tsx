@@ -18,8 +18,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 export function ChatPanel() {
   const [input, setInput] = useState("");
+  const [sessionId] = useState(() => crypto.randomUUID());
   const { messages, sendMessage, status, error } = useChat({
-    transport: new DefaultChatTransport({ api: "/api/chat" }),
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+      body: { sessionId },
+    }),
   });
   const bottomRef = useRef<HTMLDivElement>(null);
 

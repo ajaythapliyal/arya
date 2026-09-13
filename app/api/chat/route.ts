@@ -1,10 +1,14 @@
 import { deepSeek } from "@ai-sdk/deepseek";
 import { convertToModelMessages, streamText, type UIMessage } from "ai";
+import { after } from "next/server";
+import { propagateAttributes } from "@langfuse/tracing";
 import { ARYA_INSTRUCTIONS } from "@/lib/arya-instructions";
+import { langfuseSpanProcessor } from "@/instrumentation";
 
 export async function POST(req: Request) {
   const body = await req.json();
   const messages = body?.messages as UIMessage[] | undefined;
+  const sessionId = typeof body?.sessionId === "string" ? body.sessionId : undefined;
 
   if (!Array.isArray(messages) || messages.length === 0) {
     return Response.json(
@@ -31,18 +35,28 @@ export async function POST(req: Request) {
     );
   }
 
-  const result = streamText({
-    model: deepSeek("deepseek-flash"),
-    instructions: ARYA_INSTRUCTIONS,
-    messages: modelMessages,
-    abortSignal: req.signal,
-    onEnd: ({ usage, reasoningText }) => {
-      console.log(
-        `[chat] input tokens: ${usage.inputTokens}, output tokens: ${usage.outputTokens}`,
-      );
-      console.log(`[chat] reasoning: ${reasoningText ?? "(none)"}`);
+  const result = propagateAttributes(
+    { sessionId, traceName: "chat-response" },
+    () => {
+      const streamResult = streamText({
+        model: deepSeek("deepseek-flash"),
+        instructions: ARYA_INSTRUCTIONS,
+        messages: modelMessages,
+        abortSignal: req.signal,
+        telemetry: { isEnabled: true, functionId: "arya-chat" },
+        onEnd: ({ usage, reasoningText }) => {
+          console.log(
+            `[chat] input tokens: ${usage.inputTokens}, output tokens: ${usage.outputTokens}`,
+          );
+          console.log(`[chat] reasoning: ${reasoningText ?? "(none)"}`);
+        },
+      });
+
+      return streamResult;
     },
-  });
+  );
+
+  after(() => langfuseSpanProcessor.forceFlush());
 
   return result.toUIMessageStreamResponse({
     onError: (error) => {

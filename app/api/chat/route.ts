@@ -36,6 +36,12 @@ export async function POST(req: Request) {
     instructions: ARYA_INSTRUCTIONS,
     messages: modelMessages,
     abortSignal: req.signal,
+    onEnd: ({ usage, reasoningText }) => {
+      console.log(
+        `[chat] input tokens: ${usage.inputTokens}, output tokens: ${usage.outputTokens}`,
+      );
+      console.log(`[chat] reasoning: ${reasoningText ?? "(none)"}`);
+    },
   });
 
   return result.toUIMessageStreamResponse({
